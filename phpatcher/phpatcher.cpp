@@ -67,7 +67,6 @@ int main()
 {
 	srand(time(0));
 
-	fstream _32;
 	fstream _64("64.exe", ios::in | ios::out | ios::binary);
 
 	wstring name = gen_random<wstring>(14);
