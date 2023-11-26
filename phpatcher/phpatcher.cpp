@@ -2,36 +2,27 @@
 #include <iostream>
 #include <fstream>
 #include <ctime>
+#include <string.h>
+#include <sstream>
 
 using namespace std;
-
-enum processHackerOffsets32
-{
-	TitleOffset32 = 0xE0230,
-	ClassOffset32 = 0xFD3AC,
-	DescriptionOffset32 = 0x1552E4,
-	IconOffset32 = 0x133318
-};
 
 enum processHackerOffsets64
 {
 	TitleOffset64 = 0x10AED8,
 	ClassOffset64 = 0x129100,
 	DescriptionOffset64 = 0x19EAE4,
-	IconOffset64 = 0x17CB18
+	IconOffset64 = 0x17CB18,
+	qword_140159D10 = 0x20A1D
 };
 
-void patchBytes(fstream* filestream, int offset, const wchar_t* bytes)
-{
-	filestream->seekg(offset, ios::beg);
-	filestream->write((const char*)bytes, wcslen(bytes) * 2);
-}
-
-std::wstring gen_random(int len) {
+template<typename t>
+t gen_random(int len) {
 	static const char alphanum[] =
 		"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-		"abcdefghijklmnopqrstuvwxyz";
-	std::wstring tmp_s;
+		"abcdefghijklmnopqrstuvwxyz"
+		"01235467890";
+	t tmp_s;
 	tmp_s.reserve(len);
 
 	for (int i = 0; i < len; ++i) {
@@ -41,35 +32,61 @@ std::wstring gen_random(int len) {
 	return tmp_s;
 }
 
+void patch_bytes(fstream* filestream, int offset, std::string bytes_str)
+{
+	filestream->seekg(offset, ios::beg);
+
+	basic_string<unsigned char> bytes;
+
+	for (size_t i = 0; i < bytes_str.length(); i += 2)
+	{
+		uint16_t byte;
+		istringstream(bytes_str.substr(i, 2)) >> hex >> byte;
+		bytes.push_back(static_cast<unsigned char>(byte));
+	}
+
+	string result(begin(bytes), end(bytes));
+
+	filestream->write(result.c_str(), result.length() * 2);
+}
+
+void patch_string(fstream* filestream, int offset, wstring string)
+{
+	filestream->seekg(offset, ios::beg);
+	filestream->write((const char*)string.c_str(), string.length() * 2);
+}
+
+void add_junk(fstream* filestream)
+{
+	filestream->seekg(0, ios::end);
+	string rnd = gen_random<string>(rand() % 133713371337);
+	filestream->write(rnd.c_str(), rnd.length());
+}
+
 int main()
 {
 	srand(time(0));
 
 	fstream _32;
-	fstream _64;
+	fstream _64("64.exe", ios::in | ios::out | ios::binary);
 
-	_32.open("32.exe", ios::in | ios::out | ios::binary);
-	_64.open("64.exe", ios::in | ios::out | ios::binary);
+	wstring name = gen_random<wstring>(14);
+	wstring name_class = gen_random<wstring>(13);
+	wstring description = gen_random<wstring>(14);
+	wstring icon = gen_random<wstring>(14);
 
-	std::wstring name = gen_random(14);
-	std::wstring nameClass = gen_random(13);
-
-	if (_32.is_open())
+	if (!_64.is_open())
 	{
-		patchBytes(&_32, TitleOffset32, name.c_str());
-		patchBytes(&_32, ClassOffset32, nameClass.c_str());
-		patchBytes(&_32, DescriptionOffset32, name.c_str());
-		patchBytes(&_32, IconOffset32, name.c_str());
+		MessageBoxA(0, "failed to open 64.exe, make sure to rename your processhacker(x64 version) to 64.exe", 0, MB_ICONERROR);
+		return 1;
 	}
 
-	if (_64.is_open())
-	{
-		patchBytes(&_64, TitleOffset64, name.c_str());
-		patchBytes(&_64, ClassOffset64, nameClass.c_str());
-		patchBytes(&_64, DescriptionOffset64, name.c_str());
-		patchBytes(&_64, IconOffset64, name.c_str());
-	}
+	patch_string(&_64, TitleOffset64, name.c_str());
+	patch_string(&_64, ClassOffset64, name_class.c_str());
+	patch_string(&_64, DescriptionOffset64, description.c_str());
+	patch_string(&_64, IconOffset64, icon.c_str());
 
-	if (!_64.is_open() && !_32.is_open())
-		MessageBoxA(0, "failed to find both '32.exe' and '64.exe'\r\nmake sure to rename Process Hacker version depending on its architecture to 32.exe or 64.exe", 0, MB_ICONWARNING | MB_OK);
+	patch_bytes (&_64, qword_140159D10, "9090" /*0x90 = nop*/);
+
+	add_junk(&_64);
 }
